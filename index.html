@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IPTV Player</title>
+  <!-- Include hls.js from a CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      color: #333;
+    }
+    header {
+      background: #222;
+      color: #fff;
+      padding: 15px;
+      text-align: center;
+    }
+    main {
+      padding: 20px;
+    }
+    .input-area {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .input-area input[type="file"],
+    .input-area input[type="text"] {
+      padding: 8px;
+      margin: 5px;
+    }
+    .input-area button {
+      padding: 8px 15px;
+      margin: 5px;
+      cursor: pointer;
+    }
+    .container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .channel-list {
+      flex: 1 1 250px;
+      max-width: 300px;
+      background: #fff;
+      padding: 15px;
+      border: 1px solid #ccc;
+      height: 500px;
+      overflow-y: auto;
+    }
+    .channel {
+      padding: 10px;
+      margin: 5px 0;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .channel:hover {
+      background: #eaeaea;
+    }
+    .video-player {
+      flex: 2 1 500px;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+    video {
+      width: 100%;
+      height: 500px;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>IPTV Player</h1>
+  </header>
+  <main>
+    <div class="input-area">
+      <input type="file" id="m3uFile" accept=".m3u, .m3u8" />
+      or 
+      <input type="text" id="m3uUrl" placeholder="Enter m3u URL" />
+      <button id="loadUrlBtn">Load URL</button>
+    </div>
+    <div class="container">
+      <div class="channel-list" id="channelList">
+        <!-- Channels will be populated here -->
+      </div>
+      <div class="video-player">
+        <video id="videoPlayer" controls></video>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // When a file is selected, read and parse the m3u content
+    document.getElementById("m3uFile").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        parseM3U(text);
+      };
+      reader.readAsText(file);
+    });
+
+    // When a URL is entered and button clicked, fetch and parse the m3u content
+    document.getElementById("loadUrlBtn").addEventListener("click", function() {
+      const url = document.getElementById("m3uUrl").value.trim();
+      if (!url) return;
+      fetch(url)
+        .then(response => response.text())
+        .then(text => parseM3U(text))
+        .catch(err => alert("Error loading m3u file: " + err));
+    });
+
+    // Parse the m3u/m3u8 content into channel objects
+    function parseM3U(content) {
+      const lines = content.split(/\r?\n/);
+      const channels = [];
+      let channelName = "";
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+        if (line.startsWith("#EXTINF:")) {
+          // Get channel name from the EXTINF line (after the comma)
+          const commaIndex = line.indexOf(",");
+          channelName = (commaIndex !== -1) ? line.substring(commaIndex + 1).trim() : "Unknown Channel";
+        } else if (!line.startsWith("#")) {
+          // This line should be the stream URL
+          if (channelName === "") {
+            channelName = "Unknown Channel";
+          }
+          channels.push({ name: channelName, url: line });
+          channelName = "";
+        }
+      }
+      populateChannelList(channels);
+    }
+
+    // Populate the channel list in the UI
+    function populateChannelList(channels) {
+      const channelList = document.getElementById("channelList");
+      channelList.innerHTML = "";
+      if (channels.length === 0) {
+        channelList.textContent = "No channels found.";
+        return;
+      }
+      channels.forEach(channel => {
+        const div = document.createElement("div");
+        div.classList.add("channel");
+        div.textContent = channel.name;
+        div.addEventListener("click", () => playStream(channel.url));
+        channelList.appendChild(div);
+      });
+    }
+
+    // Play the selected stream URL in the video player
+    function playStream(url) {
+      const video = document.getElementById("videoPlayer");
+      // If Hls.js is supported and the URL is likely HLS (ends with .m3u8), use it
+      if (Hls.isSupported() && url.includes(".m3u8")) {
+        if (window.hls) {
+          window.hls.destroy();
+        }
+        const hls = new Hls();
+        window.hls = hls;
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+          video.play();
+        });
+      } else {
+        // For other streams, assign the URL directly
+        video.src = url;
+        video.play();
+      }
+    }
+  </script>
+</body>
+</html>
